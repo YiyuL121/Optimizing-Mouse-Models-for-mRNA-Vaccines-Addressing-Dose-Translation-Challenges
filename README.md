@@ -14,6 +14,5 @@ This repository contains supporting files for the results reported in "Estimatin
 ### Data 
   - Monolix output (Mice) : population parameters, estimated individual parameters, simulated individual parameters
   - Monolix output (human) : population parameters, estimated individual parameters, simulated individual parameters
-  - Original data: both for mice and for human (Not available, replaced by "demo data")
   - Extrapolated mice paramters across various dose, as results of allometric scaling (code part 3)
     

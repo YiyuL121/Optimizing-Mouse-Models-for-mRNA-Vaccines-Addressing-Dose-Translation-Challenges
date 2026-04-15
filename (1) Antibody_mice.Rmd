@@ -2,21 +2,11 @@
 ## Create Fig 4-A, S-Fig-3
 
 
-######### required packages ############
+######### Load shared functions & required packages ############
 ```{r}
+source("functions.R")
+
 required_packages <- c('dplyr', 'deSolve', 'ggplot2','purrr')
-
-install_and_load <- function(packages) {
-  for (pkg in packages) {
-    if (!require(pkg, character.only = TRUE)) {  
-      install.packages(pkg, dependencies = TRUE) 
-      library(pkg, character.only = TRUE)        
-    } else {
-      library(pkg, character.only = TRUE)        
-    }
-  }
-}
-
 install_and_load(required_packages)
 ```
 
@@ -33,105 +23,8 @@ step_size <- 0.005
 times<-c(seq(Tmin,Tmax,step_size))
 ```
 
-######### Simulate population trajectory ############
-```{r}
-## ODE Function to model population antibody dynamics
-ode_ab_pop <- function(pars) {
-  
-  k1 <- as.numeric(pars[1]) # Growth rate in phase 1
-  k2 <- as.numeric(pars[2]) # Decay rate in phase 2
-  A0 <- as.numeric(pars[3]) # Initial condition
-  C <- as.numeric(pars[4])  # Carrying capacity for sigmoid growth phase
-  
-  times <- c(seq(Tmin, Tmax, step_size))
-  
-  k_time <- data.frame(times = times, k = rep(0, length(times)))
-  k_time <- k_time %>% mutate(k = case_when(times <= 35 ~ k1,  # set 35 days as the timing of peak
-                                            times > 35 ~ -k2))
-  
-  k_t <- approxfun(k_time$times, k_time$k, rule = 2)
-  
-  derivs <- function(times, y, pars, k_t) {
-    with(as.list(c(pars, y)), {
-      k <- k_t(times)   # Get k value based on time
-      if (times < 35) {
-        dA <- k * A * (1 - A / C) # Sigmoid growth phase
-      } else {
-        dA <- k * A # Exponential decay phase
-      }
-      return(list(c(dA)))
-    })
-  }
-  
-  y <- c(A = A0) # Initial observation
-  
-  out <- ode(y = y, parms = pars, times = times, func = derivs, k_t = k_t)
-  as.data.frame(out)
-}
-```
-
-```{r}
-## Sampling function to simulate the CI for population dynamics
-sample_ab <- function(pop, num, vac){
-  
-  inds_mean <- which(rownames(pop) %in% c("k1_pop","k2_pop","A0_pop", 'peak_pop')) #row number of parameters
-  inds_sd <- which(rownames(pop) %in% c("omega_k1","omega_k2","omega_A0", "omega_peak"))
-
-  pars <- matrix(0, num+1, length(inds_mean))
-  
-  for (i in 1:length(inds_mean)) {
-    mean_par <- pop$value[inds_mean[i]]
-    sd_par <- pop$value[inds_sd[i]]
-    #sd_par <- pop$se_sa[inds_mean[i]] ####standard error of population parameter
-    
-    if (i==1) {
-      beta_k1_0_1ug <- pop$value[inds_mean[i]+1]
-      beta_k1_0_2ug <- pop$value[inds_mean[i]+2]
-      beta_k1_0_5ug <- pop$value[inds_mean[i]+3]
-      beta_k1_1ug   <- pop$value[inds_mean[i]+4]
-      log_k1 = log(mean_par)+(vac=='0.1ug Pfizer')*beta_k1_0_1ug+(vac=='0.2ug Pfizer')*beta_k1_0_2ug+
-        (vac=='0.5ug Pfizer')*beta_k1_0_5ug + (vac=='1ug Pfizer')*beta_k1_1ug
-      pars[1:num, i] <- exp(rnorm(num, mean = log_k1, sd=sd_par))
-      pars[num+1, i] <- exp(log_k1)
-    } 
-    
-    else if (i==2 ) {
-      beta_k2_0_1ug <- pop$value[inds_mean[i]+1]
-      beta_k2_0_2ug <- pop$value[inds_mean[i]+2]
-      beta_k2_0_5ug <- pop$value[inds_mean[i]+3]
-      beta_k2_1ug   <- pop$value[inds_mean[i]+4]
-      log_k2 = log(mean_par)+(vac=='0.1ug Pfizer')*beta_k2_0_1ug+(vac=='0.2ug Pfizer')*beta_k2_0_2ug+
-        (vac=='0.5ug Pfizer')*beta_k2_0_5ug +(vac=='1ug Pfizer')*beta_k2_1ug
-      pars[1:num, i] <- exp(rnorm(num, mean = log_k2, sd=sd_par))
-      pars[num+1, i] <- exp(log_k2)
-    } 
-    
-    else if (i==3) {
-      log_A0 = log(mean_par)
-      pars[1:num, i] <- exp(rnorm(num, mean=log_A0, sd=sd_par))
-      pars[num+1, i] <- exp(log_A0)
-    }
-    else if (i==4 ) {
-      log_C = log(mean_par)
-      pars[1:num, i] <- exp(rnorm(num, mean=log_C, sd=sd_par))
-      pars[num+1, i] <- exp(log_C)
-    } 
-  }
-  return(pars)
-}
-```
-
-############# Function to store output in column form ##############
-```{r}
-run_ODE_control <- function(pars){
-  total_AL <- matrix(NA,nrow=length(seq(Tmin,Tmax,step_size)),ncol=n)
-  for(i in 1:n){
-    out <- ode_ab_pop(pars[i, ])
-  total_AL[,i] <- out$A
-  }
-  return(total_AL)
-}
-```
+######### ODE model, sampling and sample-ODE functions: see functions.R ############
+## ode_ab_pop(), sample_ab(), run_ODE_control() are defined in functions.R.
 
 ############## Introduce the covariate of DOSE for different mice groups ################
 ```{r}
@@ -147,6 +40,16 @@ df_cov
 ############## Simulate the trajectory ####################
 ```{r}
 n = 1000  # Can change to 100, or change stepsize to a larger value to save time
+
+# Vaccine-group dose effects on k1 and k2 (used in the population trajectory below)
+beta_k1_0_1ug <- pop["beta_k1_Vaccine_Group_0_1ug_Pfizer", "value"]
+beta_k1_0_2ug <- pop["beta_k1_Vaccine_Group_0_2ug_Pfizer", "value"]
+beta_k1_0_5ug <- pop["beta_k1_Vaccine_Group_0_5ug_Pfizer", "value"]
+beta_k1_1ug   <- pop["beta_k1_Vaccine_Group_1ug_Pfizer",   "value"]
+beta_k2_0_1ug <- pop["beta_k2_Vaccine_Group_0_1ug_Pfizer", "value"]
+beta_k2_0_2ug <- pop["beta_k2_Vaccine_Group_0_2ug_Pfizer", "value"]
+beta_k2_0_5ug <- pop["beta_k2_Vaccine_Group_0_5ug_Pfizer", "value"]
+beta_k2_1ug   <- pop["beta_k2_Vaccine_Group_1ug_Pfizer",   "value"]
 
 Fit <- list()
 pb <- txtProgressBar(min = 0, max = 2, style = 3)
@@ -227,7 +130,8 @@ plot_pop1
 
 #read original data
 ```{r}
-original <- read.csv("demo_data_mice.csv") 
+original <- read.csv("demo_data_mice.csv")
+#note: this data is not provided.
 colnames(original)[colnames(original) == "Mice.Number"] <- "Code"
 original
 ```
@@ -237,55 +141,16 @@ Est <- read.csv("estimatedIndividualParameters_mice.txt", sep = ",", comment.cha
 Simulated <- read.csv("simulatedIndividualParameters_mice.txt", sep = ",", comment.char = "", header = T)
 max(Simulated$rep) #See how many simulated parameters for each individual
 ```
-######## Function ########
+######## Reset time grid for individual fits & compute them ########
+## ind_fit_mice() is defined in functions.R
 ```{r}
 Tmin <- 0
-Tmax <- 180 
+Tmax <- 180
 step_size <- 0.01
 times<-c(seq(Tmin,Tmax,step_size))
 n <- 100
 
-ind_fit_plt<-function(Est,Simulated, original){
-  
-  Fit <- list()
-  for(i in 1:nrow(Est)){
-    pars <- c(k1=Est$k1_mode[i],
-              k2=Est$k2_mode[i],
-              A0=Est$A0_mode[i],
-              C = Est$peak_mode[i])
-    fitted <- ode_ab_pop(pars)
-    d1 <- data.frame(Days=(times),y=(fitted$A))
-    Code <- Est$id[i]
-    
-    S <- 100 ###100 repeats
-    P <- matrix(NA,nrow=length(times),ncol=S)
-    
-    
-    for(j in 1:S){
-      pars <- c(k1=Simulated$k1[j+S*(i-1)],k2=Simulated$k2[j+S*(i-1)],A0=Simulated$A0[j+S*(i-1)],C=Simulated$peak[j+S*(i-1)])
-      out  <- ode_ab_pop(pars)
-      P[,j] <- out$A
-    }
-    
-    Min  <- apply(P,1,function(x){quantile(x,0.005)})
-    Max  <- apply(P,1,function(x){quantile(x,0.995)})
-    
-    fit <- cbind(d1,Min,Max,Code)
-    fit$Max[fit$Max> 100] <- 100
-    fit$Min[fit$Min> 100] <- 100
-    
-    Fit[[i]] <- data.frame(fit)
-  }
-  
-  ind_fit_unlist <- map_df(Fit, ~as.data.frame(.x))
-  unique_Vacc <- original[!duplicated(original$Code), c("Code", "Vaccine.Group")]
-  ind_fit <- merge(ind_fit_unlist, unique_Vacc, by="Code",all.x=TRUE) 
-  ind_fit$Code <- as.factor(ind_fit$Code)
-  ind_fit <- ind_fit[order(ind_fit$Code, ind_fit$Days), ]
-  return(ind_fit)
-}
-
-individual_fit <- ind_fit_plt(Est, Simulated, original)
+individual_fit <- ind_fit_mice(Est, Simulated, original)
 ```
 #########################################
 ########Supplementary Figure 3 ##########

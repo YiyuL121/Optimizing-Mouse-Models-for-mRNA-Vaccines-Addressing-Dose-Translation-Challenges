@@ -6,10 +6,11 @@
 ############# Fig-4-B ###############
 
 ```{r}
+source("functions.R")
+
 library(dplyr)
 library(ggplot2)
 library(deSolve)
-library(patchwork)
 library(stringr)
 ```
 #############################################
@@ -59,18 +60,8 @@ result
 
 
 ##########Decay Rate K2###############
+## r2_k2() is defined in functions.R
 
-
-#R^2 function #
-```{r}
-r2_k2 <- function(model, data) {
-  k2 <- data$k2
-  y_pred <- predict(model, newdata = data)
-  ss_total <- sum((k2 - mean(k2))^2)
-  ss_residual <- sum((k2 - y_pred)^2)
-  return(1 - (ss_residual / ss_total))
-}
-```
 ```{r}
 exp_model <- nls(k2 ~ a*exp(-b*dose),data = result,start = list(a = 1, b = 1))
 powerlaw_model <- nls(k2 ~  a * dose^(-b)  ,data = result, start = list(a = 1, b = 1))
@@ -95,17 +86,8 @@ print(paste("R^2 of logarithm model",r2_k2(log_model_k2, result)))
 
 
 ##########Growth Rate K1###############
+## r2_k1() is defined in functions.R
 ```{r}
-#R^2 Function
-r2_k1 <- function(model, data) {
-  k1 <- data$k1
-  y_pred <- predict(model, newdata = data)
-  ss_total <- sum((k1 - mean(k1))^2)
-  ss_residual <- sum((k1 - y_pred)^2)
-  return(1 - (ss_residual / ss_total))
-}
-
-
 exp_model_k1 <- nls(k1 ~ a*exp(-b*dose),data = result,start = list(a = 1, b = 1))
 linear_k1 <- lm(k1 ~ dose, data = result)
 powerlaw_model_k1 <- nls(k1 ~  a * dose^(-b)  ,data = result, start = list(a = 1, b = 1))
@@ -363,41 +345,7 @@ c
 ```
 
 
-#####Recall the ODE function for human trajectory#######
-```{r}
-ode_ab_pop <- function(pars) {
-  
-  k1 <- as.numeric(pars[1]) # Growth rate in phase 1
-  k2 <- as.numeric(pars[2]) # Decay rate in phase 2
-  A0 <- as.numeric(pars[3]) # Initial condition
-  C <- as.numeric(pars[4])  # Carrying capacity for sigmoid growth phase
-  
-  times <- c(seq(Tmin, Tmax, step_size))
-  
-  k_time <- data.frame(times = times, k = rep(0, length(times)))
-  k_time <- k_time %>% mutate(k = case_when(times <= 35 ~ k1, 
-                                            times > 35 ~ -k2))
-  
-  k_t <- approxfun(k_time$times, k_time$k, rule = 2)
-  
-  derivs <- function(times, y, pars, k_t) {
-    with(as.list(c(pars, y)), {
-      k <- k_t(times)   # Get k value based on time
-      if (times < 35) {
-        dA <- k * A * (1 - A / C) # Sigmoid growth phase
-      } else {
-        dA <- k * A # Exponential decay phase
-      }
-      return(list(c(dA)))
-    })
-  }
-  
-  y <- c(A = A0) # Initial observation
-  
-  out <- ode(y = y, parms = pars, times = times, func = derivs, k_t = k_t)
-  as.data.frame(out)
-}
-```
+#####ODE function (ode_ab_pop) is defined in functions.R#######
 
 ########Run ODE for extrapolated Parameters############
 ```{r}

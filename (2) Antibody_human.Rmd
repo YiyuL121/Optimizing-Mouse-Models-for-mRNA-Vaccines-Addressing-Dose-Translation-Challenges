@@ -2,21 +2,11 @@
 ## Create S-Fig-4
 
 
-######### required packages ############
+######### Load shared functions & required packages ############
 ```{r}
+source("functions.R")
+
 required_packages <- c('dplyr', 'deSolve', 'ggplot2','purrr')
-
-install_and_load <- function(packages) {
-  for (pkg in packages) {
-    if (!require(pkg, character.only = TRUE)) {  
-      install.packages(pkg, dependencies = TRUE) 
-      library(pkg, character.only = TRUE)        
-    } else {
-      library(pkg, character.only = TRUE)        
-    }
-  }
-}
-
 install_and_load(required_packages)
 ```
 
@@ -30,53 +20,16 @@ times<-c(seq(Tmin,Tmax,step_size))
 
 #######Read individual data#########
 ```{r}
-original <- read.csv("demo_data_human.csv") 
+original <- read.csv("demo_data_human.csv")
+#note: this data is not provided.
 Est <- read.csv("estimatedIndividualParameters_human.txt",  sep = ",", comment.char = "", header = T)
 Simulated <- read.csv("simulatedIndividualParameters_human.txt" ,sep = ",", comment.char = "", header = T)
 max(Simulated$rep) #See how many simulated parameters for each individual
 ```
-#######Individual plot function ########
+####### Compute individual fits ########
+## ind_fit_human() is defined in functions.R (uses ode_ab_pop and globals times/Tmin/Tmax/step_size).
 ```{r}
-
-
-ind_fit_plt<-function(Estimated,Simulated){
-  
-  Fit <- list()
-  for(i in 1:nrow(Estimated)){
-    pars <- c(k1=Estimated$k1_mode[i],
-              k2=Estimated$k2_mode[i],
-              A0=Estimated$A0_mode[i],
-              C = Estimated$peak_mode[i])
-    fitted <- ode_ab_pop(pars)
-    d1 <- data.frame(Days=(times),y=(fitted$A))
-    Code <- Estimated$id[i]
-    
-    S <- 94 ###94 repeats
-    P <- matrix(NA,nrow=length(times),ncol=S)
-    
-    
-   for(j in 1:S){
-      pars <- c(k1=Simulated$k1[j+S*(i-1)],k2=Simulated$k2[j+S*(i-1)],A0=Simulated$A0[j+S*(i-1)],C=Simulated$peak[j+S*(i-1)])
-      out  <- ode_ab_pop(pars)
-      P[,j] <- out$A
-    }
-    
-    Min  <- apply(P,1,function(x){quantile(x,0.005)})
-    Max  <- apply(P,1,function(x){quantile(x,0.995)})
-    
-    fit <- cbind(d1,Min,Max,Code)
-    fit$Max[fit$Max> 100] <- 100
-    fit$Min[fit$Min> 100] <- 100
-    
-    Fit[[i]] <- data.frame(fit)
-  }
-  
-  ind_fit_unlist <- map_df(Fit, ~as.data.frame(.x))
-  ind_fit_unlist <- ind_fit_unlist[order(ind_fit_unlist$Code, ind_fit_unlist$Days), ]
-  return(ind_fit_unlist)
-}
-
-individual_fit <- ind_fit_plt(Est, Simulated)
+individual_fit <- ind_fit_human(Est, Simulated)
 ```
 
 ######################################

@@ -5,131 +5,26 @@
 ########## This code directly uses the mice parameters generated from part 3: Allometric Scaling ############
 
 ```{r}
+source("functions.R")
+
 library(dplyr)
 library(deSolve)
+library(ggplot2)
 ```
 
-############# Functions #############
+############# Time grid for ODE #############
+## ode_ab_pop(), allometric_scaling() and generate_trajectory() are defined in functions.R
 ```{r}
 Tmin <- 0
-Tmax <- 180 
+Tmax <- 180
 step_size <- 0.01
 times <- c(seq(Tmin,Tmax,step_size))
-
-# Function for computing ODE
-ode_ab_pop <- function(pars) {
-  k1 <- as.numeric(pars[1]) # Growth rate in phase 1
-  k2 <- as.numeric(pars[2]) # Decay rate in phase 2
-  A0 <- as.numeric(pars[3]) # Initial condition
-  C <- as.numeric(pars[4])  # Carrying capacity for sigmoid growth phase
-  
-  times <- c(seq(Tmin, Tmax, step_size))
-  
-  k_time <- data.frame(times = times, k = rep(0, length(times)))
-  k_time <- k_time %>% mutate(k = case_when(times <= 35 ~ k1, 
-                                            times > 35 ~ -k2))
-  
-  k_t <- approxfun(k_time$times, k_time$k, rule = 2)
-  
-  derivs <- function(times, y, pars, k_t) {
-    with(as.list(c(pars, y)), {
-      k <- k_t(times)   # Get k value based on time
-      if (times < 35) {
-        dA <- k * A * (1 - A / C) # Sigmoid growth phase
-      } else {
-        dA <- k * A # Exponential decay phase
-      }
-      return(list(c(dA)))
-    })
-  }
-  
-  y <- c(A = A0) # Initial observation
-  
-  out <- ode(y = y, parms = pars, times = times, func = derivs, k_t = k_t)
-  as.data.frame(out)
-}
-
-# Function for allometric scaling
-allometric_scaling <- function(mice_data, SF, human_data) {
-  human_start_dose <- human_data$dose
-  mice_start_dose <- human_start_dose / SF
-  
-  mice_start_row <- mice_data %>% filter(abs(dose - mice_start_dose) < 1e-8)
-  if (nrow(mice_start_row) == 0) {
-    stop("Starting dose for mice not found in mice data.")
-  }
-  
-  k1_mice_start <- mice_start_row$k1
-  k2_mice_start <- mice_start_row$k2
-  
-  mice_data <- mice_data %>%
-    mutate(
-      percentage_change_k1 = (k1 - k1_mice_start) / k1_mice_start * 100,
-      percentage_change_k2 = (k2 - k2_mice_start) / k2_mice_start * 100
-    )
-  
-  human_data <- mice_data %>%
-    mutate(
-      dose_human = dose * SF,  
-      k1_human = human_data$k1 * (1 + percentage_change_k1 / 100),
-      k2_human = human_data$k2 * (1 + percentage_change_k2 / 100),
-      k1_lwr = human_data$k1_lwr * (1 + percentage_change_k1 / 100),
-      k1_upr = human_data$k1_upr * (1 + percentage_change_k1 / 100),
-      k2_lwr = human_data$k2_lwr * (1 + percentage_change_k2 / 100),
-      k2_upr = human_data$k2_upr * (1 + percentage_change_k2 / 100)
-    )
-  
-  output <- human_data %>%
-    dplyr::select(
-      dose_mice = dose,
-      dose_human,
-      k1_mice = k1,
-      k2_mice = k2,
-      percentage_change_k1,
-      percentage_change_k2,
-      k1_human,
-      k2_human,
-      k1_lwr,
-      k1_upr,
-      k2_lwr,
-      k2_upr
-    )
-  
-  return(output)
-}
-
-# Function to generate trajectory for a specific dose and SF
-generate_trajectory <- function(dose, SF, mice_data, human_parameter, pop_params) {
-  scaling_result <- allometric_scaling(mice_data, SF, human_parameter)
-  
-  closest_dose_idx <- which.min(abs(round(scaling_result$dose_human, 1) - dose))
-  
-  k1_val <- scaling_result$k1_human[closest_dose_idx]
-  k2_val <- scaling_result$k2_human[closest_dose_idx]
-  
-  par <- c(
-    k1 = k1_val,
-    k2 = k2_val,
-    A0 = as.numeric(pop_params["A0_pop", "value"]),
-    C  = as.numeric(pop_params["peak_pop", "value"])
-  )
-  
-  times <- seq(0, 180, 0.01)
-  trajectory <- ode_ab_pop(par)
-  data.frame(
-    Days = trajectory$time,
-    y = trajectory$A,
-    SF = rep(SF, nrow(trajectory)),
-    dose = rep(dose, nrow(trajectory))
-  )
-}
-
 ```
 ########## Read data and select SFs ##############
 ```{r}
 mice_data <- read.csv("Simulated Dose-Dependent Mice Parameters.csv")
 human_result <- read.csv("populationParameters_human.txt", row.names = 1)
-pop <- read.csv("populationParameters.txt_human", row.names = 1)
+pop <- read.csv("populationParameters_human.txt", row.names = 1)
 
 # Set up human parameters
 k1_pop_human <- human_result["k1_pop", ]
@@ -212,6 +107,8 @@ faceted_plot <- ggplot(all_trajectories,
     "100" = "#F44336", # Red
     "200" = "#4CAF50"  # Green
   ))
+
+faceted_plot
 ```
                                                   
                                                   
