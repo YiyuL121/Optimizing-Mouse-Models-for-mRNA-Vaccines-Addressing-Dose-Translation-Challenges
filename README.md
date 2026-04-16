@@ -3,7 +3,7 @@
 
 
 ### Overview
-This repository contains supporting files for the results reported in "Estimating the antibody response to mRNA vaccination in humans at different doses using mice data"
+This repository contains supporting files for the results reported in "Optimizing Mouse Models for mRNA Vaccines: Addressing Dose Translation Challenges"
 
 
 ### Features
